@@ -1,6 +1,6 @@
 module cloudeng.io/cmd/ufind
 
-go 1.21.0
+go 1.21
 
 require (
 	cloudeng.io/cmdutil v0.0.0-20240104192724-ff629ed569a9
