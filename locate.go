@@ -16,7 +16,7 @@ import (
 	"cloudeng.io/file/filewalk/asyncstat"
 	"cloudeng.io/file/filewalk/localfs"
 	"cloudeng.io/text/linewrap"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 type locateCmd struct{}
@@ -59,7 +59,7 @@ func (w *WalkerFlags) Options(followSoftLinks bool) (fwo []filewalk.Option, aso 
 var terminal_width = 80
 
 func init() {
-	if width, _, err := terminal.GetSize(0); err == nil {
+	if width, _, err := term.GetSize(0); err == nil {
 		terminal_width = width
 	}
 	if terminal_width > 200 {
