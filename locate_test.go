@@ -162,12 +162,10 @@ func analyzeDiffs(t *testing.T, m string, got, want []found) {
 			t.Logf("%v: want: %v, not in got (%v)\n", m, wm[k], k)
 		}
 	}
-
 	t.Logf("---- got  ----\n")
 	printFound(t, got)
 	t.Logf("---- want ----\n")
 	printFound(t, want)
-
 }
 
 func cmpFound(t *testing.T, found []found, expected []found) {
@@ -333,21 +331,21 @@ func TestWithStats(t *testing.T) {
 	cmpFound(t, found, nil)
 	cmpFound(t, foundErrors, expectedErrors)
 
-	found, foundErrors = locate(ctx, t, &locateFlags{}, localTestTree, "file-larger=2")
+	found, foundErrors = locate(ctx, t, &locateFlags{}, localTestTree, "file-larger=3")
 	cmpFound(t, found, allFiles)
 	cmpFound(t, foundErrors, expectedErrors)
 
-	found, foundErrors = locate(ctx, t, &locateFlags{}, localTestTree, "file-larger=3")
+	found, foundErrors = locate(ctx, t, &locateFlags{}, localTestTree, "file-larger=4")
 	cmpFound(t, found, nil)
 	cmpFound(t, foundErrors, expectedErrors)
 }
 
 func TestNumEntries(t *testing.T) {
 	ctx := context.Background()
-	found, _ := locate(ctx, t, &locateFlags{}, localTestTree, "dir-larger=0")
+	found, _ := locate(ctx, t, &locateFlags{}, localTestTree, "dir-larger=1")
 	cmpFound(t, found, allDirs)
 	// Prune has no effect on dir-larger/dir-smaller.
-	found, _ = locate(ctx, t, &locateFlags{Prune: true}, localTestTree, "dir-larger=0")
+	found, _ = locate(ctx, t, &locateFlags{Prune: true}, localTestTree, "dir-larger=1")
 	cmpFound(t, found, allDirs)
 	found, _ = locate(ctx, t, &locateFlags{}, localTestTree, "dir-larger=100")
 	cmpFound(t, found, nil)

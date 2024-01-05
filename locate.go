@@ -91,7 +91,8 @@ The expression may span multiple arguments which are concatenated together using
 type visitor func(parent, name string, entry filewalk.Entry, fi *file.Info, err error)
 
 type visit struct {
-	fs filewalk.FS
+	ctx context.Context
+	fs  filewalk.FS
 }
 
 func (v visit) visit(parent, name string, entry filewalk.Entry, fi *file.Info, err error) {
@@ -99,11 +100,19 @@ func (v visit) visit(parent, name string, entry filewalk.Entry, fi *file.Info, e
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v: %v\n", v.fs.Join(parent, name), err)
 	}
+	if fi == nil {
+		return
+	}
+	xattr, err := v.fs.XAttr(v.ctx, v.fs.Join(parent, name), *fi)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v: %v\n", v.fs.Join(parent, name), err)
+	}
+	fmt.Printf("  %v\n", xattr)
 }
 
 func (lc locateCmd) locate(ctx context.Context, values interface{}, args []string) error {
 	wkfs := localfs.New()
-	visit := visit{fs: wkfs}
+	visit := visit{fs: wkfs, ctx: ctx}
 	return lc.locateFS(ctx, wkfs, values.(*locateFlags), visit.visit, args)
 }
 
@@ -118,5 +127,7 @@ func (lc locateCmd) locateFS(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	return newWalker(expr, wkfs, stats, wko, visit).Walk(ctx, args[0])
+	needsStat := expr.NeedsStat()
+	needsStat = true
+	return newWalker(expr, wkfs, stats, needsStat, wko, visit).Walk(ctx, args[0])
 }

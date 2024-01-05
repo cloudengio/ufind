@@ -92,15 +92,6 @@ func (e expression) NeedsNumEntries() bool {
 	return e.T.Needs(numEntries{})
 }
 
-type numEntriesType struct {
-	withStat
-	numEntries int64
-}
-
-func (ne numEntriesType) NumEntries() int64 {
-	return ne.numEntries
-}
-
 type entryType struct {
 	name, path string
 	mode       fs.FileMode

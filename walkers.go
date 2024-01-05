@@ -24,13 +24,13 @@ type dirstate struct {
 	numEntries int64
 }
 
-func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, walkerOpts []filewalk.Option, visit visitor) *filewalk.Walker[dirstate] {
+func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, needsStat bool, walkerOpts []filewalk.Option, visit visitor) *filewalk.Walker[dirstate] {
 	w := &walker{
 		expr:      expr,
 		fs:        fs,
 		stats:     stats,
 		visit:     visit,
-		needsStat: expr.NeedsStat(),
+		needsStat: needsStat,
 	}
 	return filewalk.New(fs, w, walkerOpts...)
 }
