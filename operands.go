@@ -122,6 +122,14 @@ type withStat struct {
 	numEntries int64
 }
 
+func (ws withStat) Name() string {
+	return ws.name
+}
+
+func (ws withStat) Path() string {
+	return ws.path
+}
+
 func (ws withStat) ModTime() time.Time {
 	return ws.info.ModTime()
 }

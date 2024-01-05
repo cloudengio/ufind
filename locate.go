@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"cloudeng.io/file/filewalk/asyncstat"
 	"cloudeng.io/file/filewalk/localfs"
 	"cloudeng.io/text/linewrap"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type locateCmd struct{}
@@ -30,6 +32,7 @@ type locateFlags struct {
 	WalkerFlags
 	Prune           bool `subcmd:"prune,false,stop search when a directory match is found"`
 	FollowSoftLinks bool `subcmd:"follow-softlinks,false,follow softlinks"`
+	Long            bool `subcmd:"l,false,show detailed information about each match"`
 }
 
 func (w *WalkerFlags) Options(followSoftLinks bool) (fwo []filewalk.Option, aso []asyncstat.Option) {
@@ -51,6 +54,17 @@ func (w *WalkerFlags) Options(followSoftLinks bool) (fwo []filewalk.Option, aso 
 		aso = append(aso, asyncstat.WithLStat())
 	}
 	return
+}
+
+var terminal_width = 80
+
+func init() {
+	if width, _, err := terminal.GetSize(0); err == nil {
+		terminal_width = width
+	}
+	if terminal_width > 200 {
+		terminal_width = 200
+	}
 }
 
 func (lc locateCmd) explain(ctx context.Context, values interface{}, args []string) error {
@@ -79,12 +93,16 @@ as will 'name=/foo/bar'. Since name uses glob matching all directory
 levels must be specified, i.e. 'name=/*/*/baz' is required to match
 /foo/bar/baz. The re (regexp) operator can be used to match any level,
  for example 're=bar' will match '/foo/bar/baz' as will 're=bar/baz.
+
+The dir-larger operand matches directories that contain more than the
+specified number incrementally and hence entries that are encountered
+before the limit is reached may not be displayed.
 `)
 
 	out.WriteString(`
 The expression may span multiple arguments which are concatenated together using spaces. Operand values may be quoted using single quotes or may contain escaped characters using. For example re='a b.pdf' or or re=a\\ b.pdf\n
 `)
-	fmt.Println(linewrap.Block(4, 80, out.String()))
+	fmt.Println(linewrap.Block(4, terminal_width, out.String()))
 	return nil
 }
 
@@ -93,27 +111,36 @@ type visitor func(parent, name string, entry filewalk.Entry, fi *file.Info, err 
 type visit struct {
 	ctx context.Context
 	fs  filewalk.FS
+	lf  *locateFlags
 }
 
 func (v visit) visit(parent, name string, entry filewalk.Entry, fi *file.Info, err error) {
-	fmt.Println(v.fs.Join(parent, name))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v: %v\n", v.fs.Join(parent, name), err)
 	}
-	if fi == nil {
+	if fi == nil || !v.lf.Long {
+		fmt.Println(v.fs.Join(parent, name))
 		return
 	}
 	xattr, err := v.fs.XAttr(v.ctx, v.fs.Join(parent, name), *fi)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v: %v\n", v.fs.Join(parent, name), err)
 	}
-	fmt.Printf("  %v\n", xattr)
+	var user, group = fmt.Sprintf("%v", xattr.UID), fmt.Sprintf("%v", xattr.GID)
+	if id, err := idm.LookupUser(user); err == nil {
+		user = id.Username
+	}
+	if id, err := idm.LookupGroup(group); err == nil {
+		group = id.Name
+	}
+	fmt.Printf("%s: %s (%v, %v)\n", v.fs.Join(parent, name), fs.FormatFileInfo(fi), user, group)
 }
 
 func (lc locateCmd) locate(ctx context.Context, values interface{}, args []string) error {
 	wkfs := localfs.New()
-	visit := visit{fs: wkfs, ctx: ctx}
-	return lc.locateFS(ctx, wkfs, values.(*locateFlags), visit.visit, args)
+	lf := values.(*locateFlags)
+	visit := visit{fs: wkfs, ctx: ctx, lf: lf}
+	return lc.locateFS(ctx, wkfs, lf, visit.visit, args)
 }
 
 func (lc locateCmd) locateFS(ctx context.Context,
@@ -127,7 +154,6 @@ func (lc locateCmd) locateFS(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	needsStat := expr.NeedsStat()
-	needsStat = true
+	needsStat := expr.NeedsStat() || lf.Long
 	return newWalker(expr, wkfs, stats, needsStat, wko, visit).Walk(ctx, args[0])
 }

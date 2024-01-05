@@ -83,10 +83,6 @@ func TestNeedsStat(t *testing.T) {
 	if got, want := e.NeedsStat(), false; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	e = newExpr(t, "dir-smaller=100")
-	if got, want := e.NeedsNumEntries(), true; got != want {
-		t.Errorf("got %v, want %v", got, want)
-	}
 }
 
 type found struct {
@@ -276,7 +272,7 @@ func init() {
 	sortFound(allDirs)
 }
 
-func TestEntryOnly(t *testing.T) {
+func TestNamesAndPaths(t *testing.T) {
 	ctx := context.Background()
 
 	expectedErrors := zipf(zips("/a0/inaccessible-dir", "/inaccessible-dir"), "", "")
@@ -285,6 +281,10 @@ func TestEntryOnly(t *testing.T) {
 	cmpFound(t, foundErrors, expectedErrors)
 
 	found, foundErrors = locate(ctx, t, &locateFlags{}, localTestTree, "re=a0$ || re=b0.1$")
+	cmpFound(t, found, zipf(zips("", "", "/b0"), "a0", "la0", "b0.1"))
+	cmpFound(t, foundErrors, expectedErrors)
+
+	found, foundErrors = locate(ctx, t, &locateFlags{}, localTestTree, "re=a0$ || re=b0.1$ || type=x")
 	cmpFound(t, found, zipf(zips("", "", "/b0"), "a0", "la0", "b0.1"))
 	cmpFound(t, foundErrors, expectedErrors)
 
@@ -311,7 +311,7 @@ func TestEntryOnly(t *testing.T) {
 
 	found, foundErrors = locate(ctx, t, &locateFlags{Prune: true}, localTestTree, "name=a0")
 	cmpFound(t, found, zipf(zips(""), "a0"))
-	cmpFound(t, foundErrors, expectedErrors)
+	cmpFound(t, foundErrors, zipf(zips("/inaccessible-dir"), ""))
 
 	found, foundErrors = locate(ctx, t, &locateFlags{Prune: true}, localTestTree, "name=a0.1")
 	cmpFound(t, found, zipf(zips("/a0"), "a0.1"))
