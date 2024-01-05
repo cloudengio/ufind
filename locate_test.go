@@ -146,8 +146,6 @@ func asMap(got []found) map[string]found {
 func analyzeDiffs(t *testing.T, m string, got, want []found) {
 	gm := asMap(got)
 	wm := asMap(want)
-	fmt.Printf("GM: %v\n", gm)
-	fmt.Printf("WM: %v\n", wm)
 	for k := range gm {
 		if _, ok := wm[k]; !ok {
 			t.Logf("%v: got: %v, not in want (%v)\n", m, gm[k], k)
@@ -234,7 +232,7 @@ func all() []found {
 	f := []found{}
 	for _, dir := range entries {
 		d := filepath.Dir(dir)
-		if d == "/" {
+		if d == "/" || d == "\\" {
 			d = ""
 		}
 		f = append(f, found{d, filepath.Base(dir), nil})
