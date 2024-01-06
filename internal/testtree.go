@@ -60,9 +60,9 @@ func createTestDir(tmpDir string) error {
 	errs.Append(err)
 	err = os.Mkdir(j(tmpDir, "a0", "inaccessible-dir"), 0000)
 	errs.Append(err)
-	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "inaccessible-dir"))
+	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "a0", "inaccessible-dir"))
 	errs.Append(err)
-	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "a0", "inaccessible-file")) // windows.
+	err = win32testutil.MakeInaccessibleToOwner(j(tmpDir, "a0", "inaccessible-file"))
 	errs.Append(err)
 	return errs.Err()
 }
