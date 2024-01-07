@@ -286,7 +286,7 @@ func TestNamesAndPaths(t *testing.T) {
 	cmpFound(t, found, zipf(zips("", "", "/b0"), "a0", "la0", "b0.1"))
 	cmpFound(t, foundErrors, expectedErrors)
 
-	found, foundErrors = locate(ctx, t, &locateFlags{}, localTestTree, "re=a0/a0.1")
+	found, foundErrors = locate(ctx, t, &locateFlags{}, localTestTree, `re='a0[/\\]a0.1'`)
 	cmpFound(t, found, zipf(zips("/a0", "/a0/a0.1", "/a0/a0.1", "/a0/a0.1"), "a0.1", "f0", "f1", "f2"))
 	cmpFound(t, foundErrors, expectedErrors)
 
