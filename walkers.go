@@ -13,31 +13,85 @@ import (
 )
 
 type walker struct {
-	expr      expression
-	stats     *asyncstat.T
-	fs        filewalk.FS
-	visit     visitor
-	needsStat bool
+	expr  expression
+	stats *asyncstat.T
+	fs    filewalk.FS
+	visit visitor
+	walkerOptions
+}
+
+type walkerOptions struct {
+	needsStat       bool
+	followSoftLinks bool
+	scanSize        int
+	device          uint64
+	exclude         exclusions
+	isSameDevice    sameDevice
+}
+
+type walkerOption func(o *walkerOptions)
+
+func withStats(v bool) walkerOption {
+	return func(wo *walkerOptions) {
+		wo.needsStat = true
+	}
+}
+
+func withFollowSoftLinks(v bool) walkerOption {
+	return func(wo *walkerOptions) {
+		wo.followSoftLinks = true
+	}
+}
+
+func withScanSize(v int) walkerOption {
+	return func(wo *walkerOptions) {
+		wo.scanSize = v
+	}
+}
+
+func withSameDevice(sd sameDevice) walkerOption {
+	return func(wo *walkerOptions) {
+		wo.isSameDevice = sd
+	}
+}
+
+func withExclusions(ex exclusions) walkerOption {
+	return func(wo *walkerOptions) {
+		wo.exclude = ex
+	}
 }
 
 type dirstate struct {
 	numEntries int64
 }
 
-func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, needsStat bool, walkerOpts []filewalk.Option, visit visitor) *filewalk.Walker[dirstate] {
+func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, needsStat bool, fileWalkerOpts []filewalk.Option, walkerOpts []walkerOption, visit visitor) *filewalk.Walker[dirstate] {
 	w := &walker{
-		expr:      expr,
-		fs:        fs,
-		stats:     stats,
-		visit:     visit,
-		needsStat: needsStat,
+		expr:  expr,
+		fs:    fs,
+		stats: stats,
+		visit: visit,
 	}
-	return filewalk.New(fs, w, walkerOpts...)
+	for _, opt := range walkerOpts {
+		opt(&w.walkerOptions)
+	}
+	return filewalk.New(fs, w, fileWalkerOpts...)
 }
 
 func (w *walker) Prefix(ctx context.Context, _ *dirstate, prefix string, fi file.Info, err error) (bool, file.InfoList, error) {
 	if err != nil {
 		w.visit(prefix, "", filewalk.Entry{}, &fi, err)
+		return true, nil, nil
+	}
+	if w.exclude.Match(prefix) {
+		return true, nil, nil
+	}
+	same, err := w.isSameDevice.Match(ctx, w.fs, prefix, fi)
+	if err != nil {
+		w.visit(prefix, "", filewalk.Entry{}, nil, err)
+		return false, nil, nil
+	}
+	if !same {
 		return true, nil, nil
 	}
 	ws := withStat{
@@ -75,14 +129,14 @@ func (w *walker) withoutStat(ctx context.Context, state *dirstate, prefix string
 	if err != nil {
 		w.visit(prefix, "", filewalk.Entry{}, nil, err)
 	}
-	return children, err
+	return children, nil
 }
 
 func (w *walker) withStat(ctx context.Context, state *dirstate, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
 	children, all, err := w.stats.Process(ctx, prefix, contents)
 	if err != nil {
 		w.visit(prefix, "", filewalk.Entry{}, nil, err)
-		return nil, err
+		return nil, nil
 	}
 	for _, info := range all {
 		ws := withStat{

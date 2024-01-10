@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"cloudeng.io/cmdutil/flags"
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/file/filewalk/asyncstat"
@@ -30,12 +31,15 @@ type WalkerFlags struct {
 
 type locateFlags struct {
 	WalkerFlags
-	Prune           bool `subcmd:"prune,false,stop search when a directory match is found"`
-	FollowSoftLinks bool `subcmd:"follow-softlinks,false,follow softlinks"`
-	Long            bool `subcmd:"l,false,show detailed information about each match"`
+	Exclusions      flags.Repeating `subcmd:"exclude,,exclude directories matching the specified regexp patterns"`
+	SameDevice      bool            `subcmd:"same-device,true,only search directories on the same device as the starting directory"`
+	Prune           bool            `subcmd:"prune,false,stop search when a directory match is found"`
+	FollowSoftLinks bool            `subcmd:"follow-softlinks,false,follow softlinks"`
+	Long            bool            `subcmd:"l,false,show detailed information about each match"`
+	Sorted          bool            `subcmd:"sorted,false,'output in sorted, depth-first order, like the find command'"`
 }
 
-func (w *WalkerFlags) Options(followSoftLinks bool) (fwo []filewalk.Option, aso []asyncstat.Option) {
+func (w *WalkerFlags) Options(lf *locateFlags) (fwo []filewalk.Option, aso []asyncstat.Option, wo []walkerOption, err error) {
 	if w.ConcurrentScans > 0 {
 		fwo = append(fwo, filewalk.WithConcurrentScans(w.ConcurrentScans))
 	}
@@ -48,11 +52,20 @@ func (w *WalkerFlags) Options(followSoftLinks bool) (fwo []filewalk.Option, aso 
 	if w.ConcurrentStatsThreshold > 0 {
 		aso = append(aso, asyncstat.WithAsyncThreshold(w.ConcurrentStatsThreshold))
 	}
-	if followSoftLinks {
+	if lf.FollowSoftLinks {
 		aso = append(aso, asyncstat.WithStat())
 	} else {
 		aso = append(aso, asyncstat.WithLStat())
 	}
+	ex, err := newExclusions(lf.Exclusions.Values)
+	if err != nil {
+		return
+	}
+	wo = append(wo,
+		withFollowSoftLinks(lf.FollowSoftLinks),
+		withStats(w.ConcurrentStats > 0),
+		withScanSize(w.ScanSize),
+		withExclusions(ex))
 	return
 }
 
@@ -117,6 +130,7 @@ type visit struct {
 func (v visit) visit(parent, name string, entry filewalk.Entry, fi *file.Info, err error) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v: %v\n", v.fs.Join(parent, name), err)
+		return
 	}
 	if fi == nil || !v.lf.Long {
 		fmt.Println(v.fs.Join(parent, name))
@@ -148,12 +162,26 @@ func (lc locateCmd) locateFS(ctx context.Context,
 	lf *locateFlags,
 	visit visitor,
 	args []string) error {
-	wko, aso := lf.WalkerFlags.Options(lf.FollowSoftLinks)
+	wko, aso, wo, err := lf.WalkerFlags.Options(lf)
+	if err != nil {
+		return err
+	}
+	if lf.SameDevice {
+		sd, err := newSameDevice(ctx, wkfs, args[0])
+		if err != nil {
+			return err
+		}
+		wo = append(wo, withSameDevice(sd))
+	}
 	stats := asyncstat.New(wkfs, aso...)
 	expr, err := createExpr(lf.Prune, args[1:])
 	if err != nil {
 		return err
 	}
 	needsStat := expr.NeedsStat() || lf.Long
-	return newWalker(expr, wkfs, stats, needsStat, wko, visit).Walk(ctx, args[0])
+	if !lf.Sorted {
+		return newWalker(expr, wkfs, stats, needsStat, wko, wo, visit).Walk(ctx, args[0])
+	}
+	dfw := newDepthFirstWalker(expr, wkfs, stats, wo, visit)
+	return dfw.start(ctx, args[0])
 }
