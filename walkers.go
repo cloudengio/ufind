@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
@@ -33,13 +34,13 @@ type walkerOption func(o *walkerOptions)
 
 func withStats(v bool) walkerOption {
 	return func(wo *walkerOptions) {
-		wo.needsStat = true
+		wo.needsStat = v
 	}
 }
 
 func withFollowSoftLinks(v bool) walkerOption {
 	return func(wo *walkerOptions) {
-		wo.followSoftLinks = true
+		wo.followSoftLinks = v
 	}
 }
 
@@ -65,7 +66,7 @@ type dirstate struct {
 	numEntries int64
 }
 
-func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, needsStat bool, fileWalkerOpts []filewalk.Option, walkerOpts []walkerOption, visit visitor) *filewalk.Walker[dirstate] {
+func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, fileWalkerOpts []filewalk.Option, walkerOpts []walkerOption, visit visitor) *filewalk.Walker[dirstate] {
 	w := &walker{
 		expr:  expr,
 		fs:    fs,
@@ -102,8 +103,9 @@ func (w *walker) Prefix(ctx context.Context, _ *dirstate, prefix string, fi file
 		info:       fi,
 		numEntries: 0, // num entries is zero now.
 	}
-	if w.expr.Eval(ws) {
-		return w.expr.Prune(), nil, nil
+	fmt.Printf("<<<<<<<<<<<<< %v %v\n", w.expr, ws.path)
+	if w.expr.Prune() && w.expr.Eval(ws) {
+		return true, nil, nil
 	}
 	return false, nil, nil
 }

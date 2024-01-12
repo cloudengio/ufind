@@ -63,7 +63,6 @@ func (w *WalkerFlags) Options(lf *locateFlags) (fwo []filewalk.Option, aso []asy
 	}
 	wo = append(wo,
 		withFollowSoftLinks(lf.FollowSoftLinks),
-		withStats(w.ConcurrentStats > 0),
 		withScanSize(w.ScanSize),
 		withExclusions(ex))
 	return
@@ -178,10 +177,9 @@ func (lc locateCmd) locateFS(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	needsStat := expr.NeedsStat() || lf.Long
+	wo = append(wo, withStats(expr.NeedsStat() || lf.Long))
 	if !lf.Sorted {
-		return newWalker(expr, wkfs, stats, needsStat, wko, wo, visit).Walk(ctx, args[0])
+		return newWalker(expr, wkfs, stats, wko, wo, visit).Walk(ctx, args[0])
 	}
-	dfw := newDepthFirstWalker(expr, wkfs, stats, wo, visit)
-	return dfw.start(ctx, args[0])
+	return newDepthFirstWalker(expr, wkfs, stats, wo, visit).start(ctx, args[0])
 }

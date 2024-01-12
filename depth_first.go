@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
@@ -40,25 +41,7 @@ func (d *depthFirst) start(ctx context.Context, start string) error {
 	}
 	info, err := statFn(ctx, start)
 	if err != nil {
-		d.visit(start, "", filewalk.Entry{}, nil, err)
-		return nil
-	}
-	xattr, err := d.fs.XAttr(ctx, start, info)
-	if err != nil {
-		d.visit(start, "", filewalk.Entry{}, nil, err)
-		return nil
-	}
-	d.device = xattr.Device
-	ws := withStat{
-		ctx:        ctx,
-		name:       d.fs.Base(start),
-		path:       start,
-		fs:         d.fs,
-		info:       info,
-		numEntries: 0, // num entries is zero now.
-	}
-	if !d.expr.Eval(ws) {
-		return nil
+		return err
 	}
 	if !info.IsDir() {
 		entry := filewalk.Entry{
@@ -92,19 +75,19 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file
 		info:       dirInfo,
 		numEntries: 0, // num entries is zero now.
 	}
-	if !d.expr.Eval(ws) {
-		return false, nil
-	}
-	d.visit(dirName, "", filewalk.Entry{Name: dirName, Type: dirInfo.Type()}, &dirInfo, nil)
-	if d.expr.Prune() {
+	fmt.Printf("HANDLE DIR: %v on %v\n", d.expr, ws.path)
+	if d.expr.Prune() && d.expr.Eval(ws) {
 		return true, nil
 	}
+
 	sc := d.fs.LevelScanner(ws.path)
 	numEntries := int64(0)
+	fmt.Printf("scanning: %v\n", dirName)
 	for sc.Scan(ctx, d.scanSize) {
 		contents := sc.Contents()
 		prune, err := d.handleContents(ctx, dirName, contents, numEntries)
 		if err != nil {
+			fmt.Printf("ERR: prune %v %v\n", prune, err)
 			d.visit(dirName, "", filewalk.Entry{}, nil, err)
 		}
 		if prune {
@@ -112,6 +95,7 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file
 		}
 		numEntries += int64(len(contents))
 	}
+	fmt.Printf("scanning done: %v %v\n", dirName, sc.Err())
 	return false, sc.Err()
 }
 
@@ -119,17 +103,23 @@ func (d *depthFirst) handleContents(ctx context.Context, parent string, contents
 	if d.needsStat {
 		return d.handleContentsWithStat(ctx, parent, contents, numEntries)
 	}
+	return d.handleContentsWithoutStat(ctx, parent, contents, numEntries)
+}
+
+func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) (bool, error) {
 	dirs := make([]filewalk.Entry, 0, len(contents))
 	for _, c := range contents {
 		if c.IsDir() {
 			dirs = append(dirs, c)
 		}
 	}
+	// Stat the directories only.
 	dirEntries, _, err := d.stats.Process(ctx, parent, dirs)
 	if err != nil {
 		// the only non-nil error will be a context cancellation.
 		return true, err
 	}
+
 	dirMap := make(map[string]file.Info)
 	for _, de := range dirEntries {
 		dirMap[de.Name()] = de
@@ -141,17 +131,18 @@ func (d *depthFirst) handleContents(ctx context.Context, parent string, contents
 			mode:       c.Type,
 			numEntries: numEntries,
 		}
+		fmt.Printf("EVAL NO STAT: %v on %v\n", d.expr, wn.path)
 		if !d.expr.Eval(wn) {
 			continue
 		}
+		d.visit(parent, c.Name, c, nil, nil)
 		if !c.IsDir() {
-			d.visit(parent, c.Name, c, nil, nil)
 			continue
 		}
 		de := dirMap[c.Name]
 		prune, err := d.handleDir(ctx, wn.path, de)
 		if err != nil {
-			d.visit(parent, c.Name, filewalk.Entry{}, nil, err)
+			d.visit(d.fs.Join(parent, c.Name), "", filewalk.Entry{}, nil, err)
 		}
 		if prune {
 			return prune, nil
@@ -163,13 +154,20 @@ func (d *depthFirst) handleContents(ctx context.Context, parent string, contents
 func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) (bool, error) {
 	_, all, err := d.stats.Process(ctx, parent, contents)
 	if err != nil {
+		// the only non-nil error will be a context cancellation.
 		return false, err
 	}
 	for i, c := range all {
+		info := c
 		if c.IsDir() {
+			d.visit(parent, c.Name(), contents[i], &info, nil)
 			prune, err := d.handleDir(ctx, d.fs.Join(parent, c.Name()), c)
-			if prune || err != nil {
-				return prune, err
+			if err != nil {
+				d.visit(d.fs.Join(parent, c.Name()), "", filewalk.Entry{}, nil, err)
+				continue
+			}
+			if prune {
+				return prune, nil
 			}
 			continue
 		}
@@ -181,10 +179,11 @@ func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, 
 			info:       c,
 			numEntries: numEntries,
 		}
+		fmt.Printf("EVAL WITH STAT: %v on %v\n", d.expr, ws.path)
 		if !d.expr.Eval(ws) {
 			continue
 		}
-		d.visit(parent, c.Name(), contents[i], &c, nil)
+		d.visit(parent, c.Name(), contents[i], &info, nil)
 	}
 	return false, nil
 }

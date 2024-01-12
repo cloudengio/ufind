@@ -4,6 +4,12 @@
 
 package main
 
+import (
+	"fmt"
+	"path"
+	"strings"
+)
+
 /*
 
 type ordinalSeen struct {
@@ -59,6 +65,7 @@ func (o *ordinalScanner) Contents(ctx context.Context, state *ordinalState, pref
 func (o *ordinalScanner) Done(_ context.Context, _ *ordinalState, _ string, _ error) error {
 	return nil
 }
+*/
 
 func writeFiles(parent string, out *strings.Builder, nFiles int, level int, indent string) []string {
 	files := []string{}
@@ -107,6 +114,7 @@ func yamlForMockFS(name string, entries, depth int, ordered []string) (string, [
 	return out.String(), ordered
 }
 
+/*
 func TestOrdinal(t *testing.T) {
 	defer synctestutil.AssertNoGoroutines(t)()
 
