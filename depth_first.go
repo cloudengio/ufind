@@ -77,6 +77,7 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file
 	}
 	fmt.Printf("HANDLE DIR: %v on %v\n", d.expr, ws.path)
 	if d.expr.Prune() && d.expr.Eval(ws) {
+		fmt.Printf("Pruning .... %v\n", ws.path)
 		return true, nil
 	}
 
@@ -87,7 +88,6 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file
 		contents := sc.Contents()
 		prune, err := d.handleContents(ctx, dirName, contents, numEntries)
 		if err != nil {
-			fmt.Printf("ERR: prune %v %v\n", prune, err)
 			d.visit(dirName, "", filewalk.Entry{}, nil, err)
 		}
 		if prune {
@@ -131,11 +131,9 @@ func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent strin
 			mode:       c.Type,
 			numEntries: numEntries,
 		}
-		fmt.Printf("EVAL NO STAT: %v on %v\n", d.expr, wn.path)
-		if !d.expr.Eval(wn) {
-			continue
+		if d.expr.Eval(wn) {
+			d.visit(parent, c.Name, c, nil, nil)
 		}
-		d.visit(parent, c.Name, c, nil, nil)
 		if !c.IsDir() {
 			continue
 		}
@@ -158,9 +156,20 @@ func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, 
 		return false, err
 	}
 	for i, c := range all {
-		info := c
-		if c.IsDir() {
+		ws := withStat{
+			ctx:        ctx,
+			name:       c.Name(),
+			path:       d.fs.Join(parent, c.Name()),
+			fs:         d.fs,
+			info:       c,
+			numEntries: numEntries,
+		}
+		fmt.Printf("EVAL WITH STAT: %v on %v\n", d.expr, ws.path)
+		if d.expr.Eval(ws) {
+			info := c
 			d.visit(parent, c.Name(), contents[i], &info, nil)
+		}
+		if c.IsDir() {
 			prune, err := d.handleDir(ctx, d.fs.Join(parent, c.Name()), c)
 			if err != nil {
 				d.visit(d.fs.Join(parent, c.Name()), "", filewalk.Entry{}, nil, err)
@@ -171,19 +180,7 @@ func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, 
 			}
 			continue
 		}
-		ws := withStat{
-			ctx:        ctx,
-			name:       c.Name(),
-			path:       d.fs.Join(parent, c.Name()),
-			fs:         d.fs,
-			info:       c,
-			numEntries: numEntries,
-		}
-		fmt.Printf("EVAL WITH STAT: %v on %v\n", d.expr, ws.path)
-		if !d.expr.Eval(ws) {
-			continue
-		}
-		d.visit(parent, c.Name(), contents[i], &info, nil)
+
 	}
 	return false, nil
 }
