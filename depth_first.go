@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
@@ -75,17 +74,15 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file
 		info:       dirInfo,
 		numEntries: 0, // num entries is zero now.
 	}
-	fmt.Printf("HANDLE DIR: %v on %v\n", d.expr, ws.path)
 	if d.expr.Prune() && d.expr.Eval(ws) {
-		fmt.Printf("Pruning .... %v\n", ws.path)
 		return true, nil
 	}
 
 	sc := d.fs.LevelScanner(ws.path)
 	numEntries := int64(0)
-	fmt.Printf("scanning: %v\n", dirName)
 	for sc.Scan(ctx, d.scanSize) {
 		contents := sc.Contents()
+		numEntries += int64(len(contents))
 		prune, err := d.handleContents(ctx, dirName, contents, numEntries)
 		if err != nil {
 			d.visit(dirName, "", filewalk.Entry{}, nil, err)
@@ -93,9 +90,8 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file
 		if prune {
 			return prune, nil
 		}
-		numEntries += int64(len(contents))
+
 	}
-	fmt.Printf("scanning done: %v %v\n", dirName, sc.Err())
 	return false, sc.Err()
 }
 
@@ -164,7 +160,6 @@ func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, 
 			info:       c,
 			numEntries: numEntries,
 		}
-		fmt.Printf("EVAL WITH STAT: %v on %v\n", d.expr, ws.path)
 		if d.expr.Eval(ws) {
 			info := c
 			d.visit(parent, c.Name(), contents[i], &info, nil)

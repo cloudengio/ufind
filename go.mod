@@ -3,11 +3,11 @@ module cloudeng.io/cmd/ufind
 go 1.21
 
 require (
-	cloudeng.io/cmdutil v0.0.0-20240109212651-0d2348f3d68b
+	cloudeng.io/cmdutil v0.0.0-20240114015544-568a884330a1
 	cloudeng.io/errors v0.0.9
-	cloudeng.io/file v0.0.0-20240109212651-0d2348f3d68b
-	cloudeng.io/os v0.0.0-20240109212651-0d2348f3d68b
-	cloudeng.io/sys v0.0.0-20240109212651-0d2348f3d68b
+	cloudeng.io/file v0.0.0-20240114015544-568a884330a1
+	cloudeng.io/os v0.0.0-20240114015544-568a884330a1
+	cloudeng.io/sys v0.0.0-20240114015544-568a884330a1
 	cloudeng.io/text v0.0.11
 	golang.org/x/term v0.16.0
 )

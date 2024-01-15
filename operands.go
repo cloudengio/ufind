@@ -64,6 +64,13 @@ func (e expression) Eval(val any) bool {
 	return e.T.Eval(val)
 }
 
+func (e expression) EvalWithStat(val any) bool {
+	if !e.isSet {
+		return true
+	}
+	return e.T.Eval(val)
+}
+
 func (e expression) Prune() bool {
 	return e.prune
 }

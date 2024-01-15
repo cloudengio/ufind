@@ -281,7 +281,6 @@ func TestNamesAndPaths(t *testing.T) {
 			cmpFound(t, found, all())
 			cmpFound(t, foundErrors, expectedErrors)
 
-			fmt.Printf("sorted: %v, long %v --------------------\n\n", sorted, long)
 			found, foundErrors = locate(ctx, t, lf, localTestTree, "re=a0$ || re=b0.1$")
 			cmpFound(t, found, zipf(zips("", "", "/b0"), "a0", "la0", "b0.1"))
 			cmpFound(t, foundErrors, expectedErrors)
@@ -327,7 +326,6 @@ func TestNamesAndPaths(t *testing.T) {
 func TestWithStats(t *testing.T) {
 	ctx := context.Background()
 	expectedErrors := zipf(zips("/a0/inaccessible-dir", "/inaccessible-dir"), "", "")
-
 	for _, sorted := range []bool{false, true} {
 		lf := &locateFlags{Sorted: sorted}
 		lf.ScanSize = 100
@@ -352,17 +350,19 @@ func TestWithStats(t *testing.T) {
 func TestNumEntries(t *testing.T) {
 	ctx := context.Background()
 	for _, sorted := range []bool{false, true} {
-		lf := &locateFlags{Sorted: sorted}
-		lf.ScanSize = 100
-		pruned := *lf
-		pruned.Prune = true
-		t.Logf("sorted: %v", sorted)
-		found, _ := locate(ctx, t, lf, localTestTree, "dir-larger=1")
-		cmpFound(t, found, allDirs)
-		// Prune has no effect on dir-larger/dir-smaller.
-		found, _ = locate(ctx, t, &pruned, localTestTree, "dir-larger=1")
-		cmpFound(t, found, allDirs)
-		found, _ = locate(ctx, t, lf, localTestTree, "dir-larger=100")
-		cmpFound(t, found, nil)
+		for _, long := range []bool{false, true} {
+			t.Logf("sorted: %v, long %v", sorted, long)
+			lf := &locateFlags{Sorted: sorted, Long: long}
+			lf.ScanSize = 100
+			pruned := *lf
+			pruned.Prune = true
+			found, _ := locate(ctx, t, lf, localTestTree, "dir-larger=1")
+			cmpFound(t, found, allDirs)
+			// Prune has no effect on dir-larger/dir-smaller.
+			found, _ = locate(ctx, t, &pruned, localTestTree, "dir-larger=1")
+			cmpFound(t, found, allDirs)
+			found, _ = locate(ctx, t, lf, localTestTree, "dir-larger=100")
+			cmpFound(t, found, nil)
+		}
 	}
 }
