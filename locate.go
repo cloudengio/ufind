@@ -33,7 +33,6 @@ type locateFlags struct {
 	WalkerFlags
 	Exclusions      flags.Repeating `subcmd:"exclude,,exclude directories matching the specified regexp patterns"`
 	SameDevice      bool            `subcmd:"same-device,true,only search directories on the same device as the starting directory"`
-	Prune           bool            `subcmd:"prune,false,stop search when a directory match is found"`
 	FollowSoftLinks bool            `subcmd:"follow-softlinks,false,follow softlinks"`
 	Long            bool            `subcmd:"l,false,show detailed information about each match"`
 	Sorted          bool            `subcmd:"sorted,false,'output in sorted, depth-first order, like the find command'"`
@@ -80,7 +79,7 @@ func init() {
 }
 
 func (lc locateCmd) explain(ctx context.Context, values interface{}, args []string) error {
-	e, err := createExpr(false, []string{})
+	e, err := createExpr([]string{})
 	if err != nil {
 		return err
 	}
@@ -173,7 +172,7 @@ func (lc locateCmd) locateFS(ctx context.Context,
 		wo = append(wo, withSameDevice(sd))
 	}
 	stats := asyncstat.New(wkfs, aso...)
-	expr, err := createExpr(lf.Prune, args[1:])
+	expr, err := createExpr(args[1:])
 	if err != nil {
 		return err
 	}

@@ -50,21 +50,20 @@ func (d *depthFirst) start(ctx context.Context, start string) error {
 		d.visit(start, "", entry, &info, nil)
 		return nil
 	}
-	_, err = d.handleDir(ctx, start, info)
-	return err
+	return d.handleDir(ctx, start, info)
 }
 
-func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file.Info) (bool, error) {
+func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file.Info) error {
 	if d.exclude.Match(dirName) {
-		return true, nil
+		return nil
 	}
 	same, err := d.isSameDevice.Match(ctx, d.fs, dirName, dirInfo)
 	if err != nil {
 		d.visit(dirName, "", filewalk.Entry{}, nil, err)
-		return false, nil
+		return nil
 	}
 	if !same {
-		return true, nil
+		return nil
 	}
 	ws := withStat{
 		ctx:        ctx,
@@ -74,35 +73,26 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file
 		info:       dirInfo,
 		numEntries: 0, // num entries is zero now.
 	}
-	if d.expr.Prune() && d.expr.Eval(ws) {
-		return true, nil
-	}
-
 	sc := d.fs.LevelScanner(ws.path)
 	numEntries := int64(0)
 	for sc.Scan(ctx, d.scanSize) {
 		contents := sc.Contents()
 		numEntries += int64(len(contents))
-		prune, err := d.handleContents(ctx, dirName, contents, numEntries)
-		if err != nil {
+		if err := d.handleContents(ctx, dirName, contents, numEntries); err != nil {
 			d.visit(dirName, "", filewalk.Entry{}, nil, err)
 		}
-		if prune {
-			return prune, nil
-		}
-
 	}
-	return false, sc.Err()
+	return sc.Err()
 }
 
-func (d *depthFirst) handleContents(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) (bool, error) {
+func (d *depthFirst) handleContents(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) error {
 	if d.needsStat {
 		return d.handleContentsWithStat(ctx, parent, contents, numEntries)
 	}
 	return d.handleContentsWithoutStat(ctx, parent, contents, numEntries)
 }
 
-func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) (bool, error) {
+func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) error {
 	dirs := make([]filewalk.Entry, 0, len(contents))
 	for _, c := range contents {
 		if c.IsDir() {
@@ -113,9 +103,8 @@ func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent strin
 	dirEntries, _, err := d.stats.Process(ctx, parent, dirs)
 	if err != nil {
 		// the only non-nil error will be a context cancellation.
-		return true, err
+		return err
 	}
-
 	dirMap := make(map[string]file.Info)
 	for _, de := range dirEntries {
 		dirMap[de.Name()] = de
@@ -130,28 +119,23 @@ func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent strin
 		if d.expr.Eval(wn) {
 			d.visit(parent, c.Name, c, nil, nil)
 		}
-		if !c.IsDir() {
-			continue
-		}
-		de := dirMap[c.Name]
-		prune, err := d.handleDir(ctx, wn.path, de)
-		if err != nil {
-			d.visit(d.fs.Join(parent, c.Name), "", filewalk.Entry{}, nil, err)
-		}
-		if prune {
-			return prune, nil
+		if c.IsDir() {
+			if err := d.handleDir(ctx, wn.path, dirMap[c.Name]); err != nil {
+				d.visit(d.fs.Join(parent, c.Name), "", filewalk.Entry{}, nil, err)
+			}
 		}
 	}
-	return false, nil
+	return nil
 }
 
-func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) (bool, error) {
+func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) error {
 	_, all, err := d.stats.Process(ctx, parent, contents)
 	if err != nil {
 		// the only non-nil error will be a context cancellation.
-		return false, err
+		return err
 	}
 	for i, c := range all {
+		info := c
 		ws := withStat{
 			ctx:        ctx,
 			name:       c.Name(),
@@ -161,21 +145,14 @@ func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, 
 			numEntries: numEntries,
 		}
 		if d.expr.Eval(ws) {
-			info := c
 			d.visit(parent, c.Name(), contents[i], &info, nil)
 		}
 		if c.IsDir() {
-			prune, err := d.handleDir(ctx, d.fs.Join(parent, c.Name()), c)
-			if err != nil {
+			if err := d.handleDir(ctx, d.fs.Join(parent, info.Name()), info); err != nil {
 				d.visit(d.fs.Join(parent, c.Name()), "", filewalk.Entry{}, nil, err)
 				continue
 			}
-			if prune {
-				return prune, nil
-			}
-			continue
 		}
-
 	}
-	return false, nil
+	return nil
 }

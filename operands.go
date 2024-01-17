@@ -37,7 +37,7 @@ func init() {
 	}
 }
 
-func createExpr(prune bool, input []string) (expression, error) {
+func createExpr(input []string) (expression, error) {
 	parser := matcher.New()
 	parser.RegisterOperand("user", uid)
 	parser.RegisterOperand("group", gid)
@@ -47,7 +47,7 @@ func createExpr(prune bool, input []string) (expression, error) {
 		return expression{parser: parser}, nil
 	}
 	expr, err := parser.Parse(m)
-	return expression{T: expr, parser: parser, isSet: true, prune: prune}, err
+	return expression{T: expr, parser: parser, isSet: true}, err
 }
 
 type expression struct {
@@ -69,10 +69,6 @@ func (e expression) EvalWithStat(val any) bool {
 		return true
 	}
 	return e.T.Eval(val)
-}
-
-func (e expression) Prune() bool {
-	return e.prune
 }
 
 type needsStat struct{}

@@ -10,18 +10,12 @@ import (
 	"path"
 	"reflect"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 
 	"cloudeng.io/cmdutil/flags"
 	"cloudeng.io/file/filewalk/filewalktestutil"
 )
-
-type details struct {
-	uid, gid string
-	mode     string
-}
 
 func fillTree(ordered []string, parent string, out *strings.Builder, nEntries, left, level int) []string {
 	if left == 0 {
@@ -42,7 +36,7 @@ func fillTree(ordered []string, parent string, out *strings.Builder, nEntries, l
 		out.WriteString(indent)
 		out.WriteString(fmt.Sprintf("    name: %s\n", name))
 		out.WriteString(indent)
-		out.WriteString(fmt.Sprintf("    entries:\n"))
+		out.WriteString("    entries:\n")
 		ordered = fillTree(ordered, path.Join(parent, name), out, nEntries, left-1, level+2)
 	}
 	return ordered
@@ -78,11 +72,9 @@ func TestDepthFirst(t *testing.T) {
 			if err := lc.locateFS(ctx, fs, lf, collect.visit, []string{"root"}); err != nil {
 				t.Fatal(err)
 			}
-			analyzeDiffs(t, "sorted", collect.found, expected)
+			cmpFoundAnyOrder(t, collect.found, expected)
 			if sorted {
-				if !slices.Equal(collect.found, expected) {
-					t.Errorf("got %v, want %v", collect.found, expected)
-				}
+				cmpFound(t, collect.found, expected)
 			}
 		}
 	}
@@ -186,7 +178,10 @@ func TestExclusions(t *testing.T) {
 			if err := lc.locateFS(ctx, fs, lf, collect.visit, []string{"root"}); err != nil {
 				t.Fatal(err)
 			}
-			analyzeDiffs(t, "exclusions", collect.found, expected)
+			cmpFoundAnyOrder(t, collect.found, expected)
+			if sorted {
+				cmpFound(t, collect.found, expected)
+			}
 		}
 	}
 }
