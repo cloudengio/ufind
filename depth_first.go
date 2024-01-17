@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
@@ -57,7 +56,6 @@ func (d *depthFirst) start(ctx context.Context, start string) error {
 
 func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file.Info) (bool, error) {
 	if d.exclude.Match(dirName) {
-		fmt.Printf("EXCLUDE.... %v\n", dirName)
 		return true, nil
 	}
 	same, err := d.isSameDevice.Match(ctx, d.fs, dirName, dirInfo)
