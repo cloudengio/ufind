@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
@@ -103,7 +102,6 @@ func (w *walker) Prefix(ctx context.Context, _ *dirstate, prefix string, fi file
 		info:       fi,
 		numEntries: 0, // num entries is zero now.
 	}
-	fmt.Printf("<<<<<<<<<<<<< %v %v\n", w.expr, ws.path)
 	if w.expr.Prune() && w.expr.Eval(ws) {
 		return true, nil, nil
 	}
