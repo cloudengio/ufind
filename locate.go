@@ -85,7 +85,7 @@ func (lc locateCmd) explain(ctx context.Context, values interface{}, args []stri
 	}
 	p := e.parser
 	var out strings.Builder
-	out.WriteString("idu commands accept boolean expressions using || && ! and ( and ) to combine any of the following operands:\n\n")
+	out.WriteString("ufind commands accept boolean expressions using || && ! and ( and ) to combine any of the following operands:\n\n")
 
 	for _, op := range p.ListOperands() {
 		out.WriteString("  ")
