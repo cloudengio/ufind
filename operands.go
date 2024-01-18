@@ -54,7 +54,6 @@ type expression struct {
 	boolexpr.T
 	parser *boolexpr.Parser
 	isSet  bool
-	prune  bool
 }
 
 func (e expression) Eval(val any) bool {
