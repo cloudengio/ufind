@@ -78,6 +78,7 @@ func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, fileWalkerOp
 		stats: stats,
 		visit: visit,
 	}
+	w.walkerOptions.depth = -1
 	for _, opt := range walkerOpts {
 		opt(&w.walkerOptions)
 	}

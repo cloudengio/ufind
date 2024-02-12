@@ -143,53 +143,56 @@ func asMap(got []found) map[string]found {
 }
 
 func analyzeDiffs(t *testing.T, m string, got, want []found) {
+	t.Helper()
 	gm := asMap(got)
 	wm := asMap(want)
 	for k := range gm {
 		if _, ok := wm[k]; !ok {
-			t.Logf("%v: got: %v, not in want (%v)\n", m, gm[k], k)
+			t.Logf("analyzeDiffs: %v: got: %v, not in want (%v)\n", m, gm[k], k)
 		}
 	}
 	for k := range wm {
 		if _, ok := gm[k]; !ok {
-			t.Logf("%v: want: %v, not in got (%v)\n", m, wm[k], k)
+			t.Logf("analyzeDiffs: %v: want: %v, not in got (%v)\n", m, wm[k], k)
 		}
 	}
-	t.Logf("%v: ---- got ----\n", m)
+	t.Logf("analyzeDiffs: %v: ---- got ----\n", m)
 	printFound(t, got)
-	t.Logf("%v: ---- want ----\n", m)
+	t.Logf("analyzeDiffs: %v: ---- want ----\n", m)
 	printFound(t, want)
 }
 
 func cmpFoundAnyOrder(t *testing.T, found []found, expected []found) {
+	t.Helper()
 	gm := asMap(found)
 	wm := asMap(expected)
 	for k := range gm {
 		if _, ok := wm[k]; !ok {
-			t.Fatalf("got: %v, not in want (%v)\n", gm[k], k)
+			t.Fatalf("cmpFoundAnyOrder: got: %v, not in want (%v)\n", gm[k], k)
 		}
 	}
 	for k := range wm {
 		if _, ok := gm[k]; !ok {
-			t.Fatalf("want: %v, not in got (%v)\n", wm[k], k)
+			t.Fatalf("cmpFoundAnyOrder: want: %v, not in got (%v)\n", wm[k], k)
 		}
 	}
 }
 
 func cmpFound(t *testing.T, found []found, expected []found) {
+	t.Helper()
 	_, _, line, _ := runtime.Caller(1)
 	if got, want := len(found), len(expected); got != want {
 		analyzeDiffs(t, "mismatched len", found, expected)
-		t.Fatalf("line %v, got %v, want %v", line, got, want)
+		t.Fatalf("cmpFound: line %v, got %v, want %v", line, got, want)
 	}
 	for i := range found {
 		if got, want := found[i].prefix, expected[i].prefix; got != want {
 			analyzeDiffs(t, "wrong prefix", found, expected)
-			t.Fatalf("line %v, got %v, want %v", line, got, want)
+			t.Fatalf("cmpFound: line %v, got %v, want %v", line, got, want)
 		}
 		if got, want := found[i].name, expected[i].name; got != want {
 			analyzeDiffs(t, "wrong name", found, expected)
-			t.Fatalf("line %v, got %v, want %v", line, got, want)
+			t.Fatalf("cmpFound: line %v, got %v, want %v", line, got, want)
 		}
 	}
 }
@@ -208,40 +211,41 @@ func zips(a ...string) []string {
 	return a
 }
 
-func all() []found {
-	entries := []string{
-		"/f2",
-		"/inaccessible-dir",
-		"/a0",
-		"/a0/f2",
-		"/a0/inaccessible-file",
-		"/a0/a0.0",
-		"/a0/a0.0/f2",
-		"/a0/a0.0/f0",
-		"/a0/a0.0/f1",
-		"/a0/inaccessible-dir",
-		"/a0/f0",
-		"/a0/f1",
-		"/a0/a0.1",
-		"/a0/a0.1/f2",
-		"/a0/a0.1/f0",
-		"/a0/a0.1/f1",
-		"/lf0",
-		"/b0",
-		"/b0/b0.0",
-		"/b0/b0.0/f2",
-		"/b0/b0.0/f0",
-		"/b0/b0.0/f1",
-		"/b0/b0.1",
-		"/b0/b0.1/b1.0",
-		"/b0/b0.1/b1.0/f2",
-		"/b0/b0.1/b1.0/f0",
-		"/b0/b0.1/b1.0/f1",
-		"/f0",
-		"/la0",
-		"/f1",
-		"/la1",
-	}
+var rawPaths = []string{
+	"/f2",
+	"/inaccessible-dir",
+	"/a0",
+	"/a0/f2",
+	"/a0/inaccessible-file",
+	"/a0/a0.0",
+	"/a0/a0.0/f2",
+	"/a0/a0.0/f0",
+	"/a0/a0.0/f1",
+	"/a0/inaccessible-dir",
+	"/a0/f0",
+	"/a0/f1",
+	"/a0/a0.1",
+	"/a0/a0.1/f2",
+	"/a0/a0.1/f0",
+	"/a0/a0.1/f1",
+	"/lf0",
+	"/b0",
+	"/b0/b0.0",
+	"/b0/b0.0/f2",
+	"/b0/b0.0/f0",
+	"/b0/b0.0/f1",
+	"/b0/b0.1",
+	"/b0/b0.1/b1.0",
+	"/b0/b0.1/b1.0/f2",
+	"/b0/b0.1/b1.0/f0",
+	"/b0/b0.1/b1.0/f1",
+	"/f0",
+	"/la0",
+	"/f1",
+	"/la1",
+}
+
+func genFound(entries []string) []found {
 	f := []found{}
 	for _, dir := range entries {
 		d := filepath.Dir(dir)
@@ -252,6 +256,21 @@ func all() []found {
 	}
 	sortFound(f)
 	return f
+}
+
+func all() []found {
+	return genFound(rawPaths)
+}
+
+func depthN(d int) []found {
+	dp := []string{}
+	for _, a := range rawPaths {
+		sd := strings.Count(a, "/")
+		if d >= sd-1 {
+			dp = append(dp, a)
+		}
+	}
+	return genFound(dp)
 }
 
 var allFiles = zipf(zips(
@@ -287,7 +306,7 @@ func TestNamesAndPaths(t *testing.T) {
 	ctx := context.Background()
 	for _, sorted := range []bool{false, true} {
 		for _, long := range []bool{false, true} {
-			lf := &locateFlags{Sorted: sorted, Long: long}
+			lf := &locateFlags{Sorted: sorted, Long: long, Depth: -1}
 			lf.ScanSize = 100
 			expectedErrors := zipf(zips("/a0/inaccessible-dir", "/inaccessible-dir"), "", "")
 			found, foundErrors := locate(ctx, t, lf, localTestTree, "")
@@ -317,11 +336,33 @@ func TestNamesAndPaths(t *testing.T) {
 	}
 }
 
+func TestNamesAndPathsDepth(t *testing.T) {
+	ctx := context.Background()
+	for _, sorted := range []bool{false, true} {
+		for _, long := range []bool{false, true} {
+			for _, tc := range []struct {
+				depth  int
+				errors []found
+			}{
+				{0, nil},
+				{1, zipf(zips("/inaccessible-dir"), "")},
+				{2, zipf(zips("/a0/inaccessible-dir", "/inaccessible-dir"), "", "")},
+			} {
+				lf := &locateFlags{Sorted: sorted, Long: long, Depth: tc.depth}
+				lf.ScanSize = 1
+				found, foundErrors := locate(ctx, t, lf, localTestTree, "")
+				cmpFound(t, found, depthN(tc.depth))
+				cmpFound(t, foundErrors, tc.errors)
+			}
+		}
+	}
+}
+
 func TestWithStats(t *testing.T) {
 	ctx := context.Background()
 	expectedErrors := zipf(zips("/a0/inaccessible-dir", "/inaccessible-dir"), "", "")
 	for _, sorted := range []bool{false, true} {
-		lf := &locateFlags{Sorted: sorted}
+		lf := &locateFlags{Sorted: sorted, Depth: -1}
 		lf.ScanSize = 100
 		found, foundErrors := locate(ctx, t, lf, localTestTree, "newer=2010-12-13")
 		cmpFound(t, found, all())
@@ -345,7 +386,7 @@ func TestNumEntries(t *testing.T) {
 	ctx := context.Background()
 	for _, sorted := range []bool{false, true} {
 		for _, long := range []bool{false, true} {
-			lf := &locateFlags{Sorted: sorted, Long: long}
+			lf := &locateFlags{Sorted: sorted, Long: long, Depth: -1}
 			lf.ScanSize = 100
 			found, _ := locate(ctx, t, lf, localTestTree, "dir-larger=1")
 			cmpFound(t, found, allDirs)

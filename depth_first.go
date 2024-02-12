@@ -27,6 +27,7 @@ func newDepthFirstWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, wa
 		stats: stats,
 		visit: visit,
 	}
+	w.depth = -1
 	for _, opt := range walkerOpts {
 		opt(&w.walkerOptions)
 	}
@@ -54,7 +55,7 @@ func (d *depthFirst) start(ctx context.Context, start string) error {
 }
 
 func (d *depthFirst) handleDir(ctx context.Context, dirName string, depth int, dirInfo file.Info) error {
-	if d.depth > 0 && depth > d.depth {
+	if d.depth >= 0 && depth > d.depth {
 		return nil
 	}
 	if d.exclude.Match(dirName) {
