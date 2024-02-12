@@ -65,7 +65,7 @@ func TestDepthFirst(t *testing.T) {
 	}
 	for _, sorted := range []bool{false, true} {
 		for _, long := range []bool{false, true} {
-			lf := &locateFlags{Sorted: sorted, Long: long}
+			lf := &locateFlags{Sorted: sorted, Long: long, Depth: -1}
 			lf.ScanSize = 100
 			collect := &collector{}
 			lc := locateCmd{}
@@ -125,7 +125,7 @@ func TestSameDevice(t *testing.T) {
 		{true, true, sameDevice},
 		{false, true, sameDevice},
 	} {
-		lf := &locateFlags{Sorted: tc.sorted, SameDevice: tc.sameDevice}
+		lf := &locateFlags{Sorted: tc.sorted, SameDevice: tc.sameDevice, Depth: -1}
 		lf.ScanSize = 100
 		collect := &collector{}
 		lc := locateCmd{}
@@ -171,7 +171,7 @@ func TestExclusions(t *testing.T) {
 	}
 	for _, sorted := range []bool{false, true} {
 		for _, long := range []bool{false, true} {
-			lf := &locateFlags{Sorted: sorted, Long: long, Exclusions: exclusions}
+			lf := &locateFlags{Sorted: sorted, Long: long, Exclusions: exclusions, Depth: -1}
 			lf.ScanSize = 100
 			collect := &collector{}
 			lc := locateCmd{}

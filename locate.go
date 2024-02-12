@@ -11,11 +11,14 @@ import (
 	"os"
 	"strings"
 
+	"cloudeng.io/aws/awsconfig"
+	"cloudeng.io/aws/s3fs"
 	"cloudeng.io/cmdutil/flags"
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/file/filewalk/asyncstat"
-	"cloudeng.io/file/filewalk/localfs"
+	"cloudeng.io/file/localfs"
+	"cloudeng.io/path/cloudpath"
 	"cloudeng.io/text/linewrap"
 	"golang.org/x/term"
 )
@@ -36,6 +39,7 @@ type locateFlags struct {
 	FollowSoftLinks bool            `subcmd:"follow-softlinks,false,follow softlinks"`
 	Long            bool            `subcmd:"l,false,show detailed information about each match"`
 	Sorted          bool            `subcmd:"sorted,false,'output in sorted, depth-first order, like the find command'"`
+	Depth           int             `subcmd:"depth,-1,limit the depth of the search"`
 }
 
 func (w *WalkerFlags) Options(lf *locateFlags) (fwo []filewalk.Option, aso []asyncstat.Option, wo []walkerOption, err error) {
@@ -45,6 +49,7 @@ func (w *WalkerFlags) Options(lf *locateFlags) (fwo []filewalk.Option, aso []asy
 	if w.ScanSize > 0 {
 		fwo = append(fwo, filewalk.WithScanSize(w.ScanSize))
 	}
+	fwo = append(fwo, filewalk.WithDepth(lf.Depth))
 	if w.ConcurrentStats > 0 {
 		aso = append(aso, asyncstat.WithAsyncStats(w.ConcurrentStats))
 	}
@@ -63,6 +68,7 @@ func (w *WalkerFlags) Options(lf *locateFlags) (fwo []filewalk.Option, aso []asy
 	wo = append(wo,
 		withFollowSoftLinks(lf.FollowSoftLinks),
 		withScanSize(w.ScanSize),
+		withDepth(lf.Depth),
 		withExclusions(ex))
 	return
 }
@@ -149,7 +155,24 @@ func (v visit) visit(parent, name string, entry filewalk.Entry, fi *file.Info, e
 }
 
 func (lc locateCmd) locate(ctx context.Context, values interface{}, args []string) error {
-	wkfs := localfs.New()
+	loc := args[0]
+	match := cloudpath.DefaultMatchers.Match(loc)
+	if len(match.Matched) == 0 {
+		return fmt.Errorf("unsupported path: %v", loc)
+	}
+	var wkfs filewalk.FS
+	switch match.Scheme {
+	case "s3":
+		cfg, err := awsconfig.Load(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to load AWS config: %v", err)
+		}
+		wkfs = s3fs.New(cfg)
+	case "unix":
+		wkfs = localfs.New()
+	default:
+		return fmt.Errorf("unsupported file system scheme: %v", match.Scheme)
+	}
 	lf := values.(*locateFlags)
 	visit := visit{fs: wkfs, ctx: ctx, lf: lf}
 	return lc.locateFS(ctx, wkfs, lf, visit.visit, args)

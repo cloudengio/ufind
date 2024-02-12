@@ -26,6 +26,7 @@ type walkerOptions struct {
 	scanSize        int
 	exclude         exclusions
 	isSameDevice    sameDevice
+	depth           int
 }
 
 type walkerOption func(o *walkerOptions)
@@ -60,6 +61,12 @@ func withExclusions(ex exclusions) walkerOption {
 	}
 }
 
+func withDepth(d int) walkerOption {
+	return func(wo *walkerOptions) {
+		wo.depth = d
+	}
+}
+
 type dirstate struct {
 	numEntries int64
 }
@@ -71,6 +78,7 @@ func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, fileWalkerOp
 		stats: stats,
 		visit: visit,
 	}
+	w.walkerOptions.depth = -1
 	for _, opt := range walkerOpts {
 		opt(&w.walkerOptions)
 	}
