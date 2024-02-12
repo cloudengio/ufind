@@ -18,7 +18,7 @@ import (
 	"cloudeng.io/cmd/ufind/internal"
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
-	"cloudeng.io/file/filewalk/localfs"
+	"cloudeng.io/file/localfs"
 )
 
 var localTestTree string
