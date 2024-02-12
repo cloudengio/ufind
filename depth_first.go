@@ -50,10 +50,13 @@ func (d *depthFirst) start(ctx context.Context, start string) error {
 		d.visit(start, "", entry, &info, nil)
 		return nil
 	}
-	return d.handleDir(ctx, start, info)
+	return d.handleDir(ctx, start, 0, info)
 }
 
-func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file.Info) error {
+func (d *depthFirst) handleDir(ctx context.Context, dirName string, depth int, dirInfo file.Info) error {
+	if d.depth > 0 && depth > d.depth {
+		return nil
+	}
 	if d.exclude.Match(dirName) {
 		return nil
 	}
@@ -78,21 +81,21 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, dirInfo file
 	for sc.Scan(ctx, d.scanSize) {
 		contents := sc.Contents()
 		numEntries += int64(len(contents))
-		if err := d.handleContents(ctx, dirName, contents, numEntries); err != nil {
+		if err := d.handleContents(ctx, dirName, depth+1, contents, numEntries); err != nil {
 			d.visit(dirName, "", filewalk.Entry{}, nil, err)
 		}
 	}
 	return sc.Err()
 }
 
-func (d *depthFirst) handleContents(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) error {
+func (d *depthFirst) handleContents(ctx context.Context, parent string, depth int, contents []filewalk.Entry, numEntries int64) error {
 	if d.needsStat {
-		return d.handleContentsWithStat(ctx, parent, contents, numEntries)
+		return d.handleContentsWithStat(ctx, parent, depth, contents, numEntries)
 	}
-	return d.handleContentsWithoutStat(ctx, parent, contents, numEntries)
+	return d.handleContentsWithoutStat(ctx, parent, depth, contents, numEntries)
 }
 
-func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) error {
+func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent string, depth int, contents []filewalk.Entry, numEntries int64) error {
 	dirs := make([]filewalk.Entry, 0, len(contents))
 	for _, c := range contents {
 		if c.IsDir() {
@@ -120,7 +123,7 @@ func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent strin
 			d.visit(parent, c.Name, c, nil, nil)
 		}
 		if c.IsDir() {
-			if err := d.handleDir(ctx, wn.path, dirMap[c.Name]); err != nil {
+			if err := d.handleDir(ctx, wn.path, depth, dirMap[c.Name]); err != nil {
 				d.visit(d.fs.Join(parent, c.Name), "", filewalk.Entry{}, nil, err)
 			}
 		}
@@ -128,7 +131,7 @@ func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent strin
 	return nil
 }
 
-func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, contents []filewalk.Entry, numEntries int64) error {
+func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, depth int, contents []filewalk.Entry, numEntries int64) error {
 	_, all, err := d.stats.Process(ctx, parent, contents)
 	if err != nil {
 		// the only non-nil error will be a context cancellation.
@@ -148,7 +151,7 @@ func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, 
 			d.visit(parent, c.Name(), contents[i], &info, nil)
 		}
 		if c.IsDir() {
-			if err := d.handleDir(ctx, d.fs.Join(parent, info.Name()), info); err != nil {
+			if err := d.handleDir(ctx, d.fs.Join(parent, info.Name()), depth, info); err != nil {
 				d.visit(d.fs.Join(parent, c.Name()), "", filewalk.Entry{}, nil, err)
 				continue
 			}

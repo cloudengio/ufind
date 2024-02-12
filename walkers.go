@@ -26,6 +26,7 @@ type walkerOptions struct {
 	scanSize        int
 	exclude         exclusions
 	isSameDevice    sameDevice
+	depth           int
 }
 
 type walkerOption func(o *walkerOptions)
@@ -57,6 +58,12 @@ func withSameDevice(sd sameDevice) walkerOption {
 func withExclusions(ex exclusions) walkerOption {
 	return func(wo *walkerOptions) {
 		wo.exclude = ex
+	}
+}
+
+func withDepth(d int) walkerOption {
+	return func(wo *walkerOptions) {
+		wo.depth = d
 	}
 }
 
