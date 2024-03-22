@@ -13,10 +13,11 @@ import (
 )
 
 type walker struct {
-	expr  expression
-	stats *asyncstat.T
-	fs    filewalk.FS
-	visit visitor
+	expr       expression
+	statIssuer *asyncstat.T
+	fs         filewalk.FS
+	visit      visitor
+	stats      *Stats
 	walkerOptions
 }
 
@@ -71,12 +72,13 @@ type dirstate struct {
 	numEntries int64
 }
 
-func newWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, fileWalkerOpts []filewalk.Option, walkerOpts []walkerOption, visit visitor) *filewalk.Walker[dirstate] {
+func newWalker(expr expression, fs filewalk.FS, statIssuer *asyncstat.T, stats *Stats, fileWalkerOpts []filewalk.Option, walkerOpts []walkerOption, visit visitor) *filewalk.Walker[dirstate] {
 	w := &walker{
-		expr:  expr,
-		fs:    fs,
-		stats: stats,
-		visit: visit,
+		expr:       expr,
+		fs:         fs,
+		statIssuer: statIssuer,
+		stats:      stats,
+		visit:      visit,
 	}
 	w.walkerOptions.depth = -1
 	for _, opt := range walkerOpts {
@@ -132,7 +134,7 @@ func (w *walker) withoutStat(ctx context.Context, state *dirstate, prefix string
 		}
 		w.visit(prefix, e.Name, e, nil, nil)
 	}
-	children, _, err := w.stats.Process(ctx, prefix, dirs)
+	children, _, err := w.statIssuer.Process(ctx, prefix, dirs)
 	if err != nil {
 		w.visit(prefix, "", filewalk.Entry{}, nil, err)
 	}
@@ -140,7 +142,7 @@ func (w *walker) withoutStat(ctx context.Context, state *dirstate, prefix string
 }
 
 func (w *walker) withStat(ctx context.Context, state *dirstate, prefix string, contents []filewalk.Entry) (file.InfoList, error) {
-	children, all, err := w.stats.Process(ctx, prefix, contents)
+	children, all, err := w.statIssuer.Process(ctx, prefix, contents)
 	if err != nil {
 		w.visit(prefix, "", filewalk.Entry{}, nil, err)
 		return nil, nil
@@ -155,6 +157,7 @@ func (w *walker) withStat(ctx context.Context, state *dirstate, prefix string, c
 			numEntries: state.numEntries,
 		}
 		if w.expr.Eval(ws) {
+			w.stats.UpdateFile(w.fs.Join(prefix, info.Name()), info.Size())
 			w.visit(prefix, info.Name(),
 				filewalk.Entry{Name: info.Name(), Type: info.Type()}, &info, nil)
 		}
@@ -170,10 +173,11 @@ func (w *walker) Contents(ctx context.Context, state *dirstate, prefix string, c
 	return w.withoutStat(ctx, state, prefix, contents)
 }
 
-func (w *walker) Done(ctx context.Context, _ *dirstate, prefix string, err error) error {
+func (w *walker) Done(ctx context.Context, state *dirstate, prefix string, err error) error {
 	if err != nil {
 		w.visit(prefix, "", filewalk.Entry{}, nil, err)
 		return nil
 	}
+	w.stats.UpdateDir(prefix, state.numEntries)
 	return nil
 }

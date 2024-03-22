@@ -13,19 +13,21 @@ import (
 )
 
 type depthFirst struct {
-	expr  expression
-	stats *asyncstat.T
-	fs    filewalk.FS
-	visit visitor
+	expr       expression
+	statIssuer *asyncstat.T
+	stats      *Stats
+	fs         filewalk.FS
+	visit      visitor
 	walkerOptions
 }
 
-func newDepthFirstWalker(expr expression, fs filewalk.FS, stats *asyncstat.T, walkerOpts []walkerOption, visit visitor) *depthFirst {
+func newDepthFirstWalker(expr expression, fs filewalk.FS, statIssuer *asyncstat.T, stats *Stats, walkerOpts []walkerOption, visit visitor) *depthFirst {
 	w := &depthFirst{
-		expr:  expr,
-		fs:    fs,
-		stats: stats,
-		visit: visit,
+		expr:       expr,
+		fs:         fs,
+		statIssuer: statIssuer,
+		stats:      stats,
+		visit:      visit,
 	}
 	w.depth = -1
 	for _, opt := range walkerOpts {
@@ -86,6 +88,7 @@ func (d *depthFirst) handleDir(ctx context.Context, dirName string, depth int, d
 			d.visit(dirName, "", filewalk.Entry{}, nil, err)
 		}
 	}
+	d.stats.UpdateDir(dirName, numEntries)
 	return sc.Err()
 }
 
@@ -104,7 +107,7 @@ func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent strin
 		}
 	}
 	// Stat the directories only.
-	dirEntries, _, err := d.stats.Process(ctx, parent, dirs)
+	dirEntries, _, err := d.statIssuer.Process(ctx, parent, dirs)
 	if err != nil {
 		// the only non-nil error will be a context cancellation.
 		return err
@@ -133,7 +136,7 @@ func (d *depthFirst) handleContentsWithoutStat(ctx context.Context, parent strin
 }
 
 func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, depth int, contents []filewalk.Entry, numEntries int64) error {
-	_, all, err := d.stats.Process(ctx, parent, contents)
+	_, all, err := d.statIssuer.Process(ctx, parent, contents)
 	if err != nil {
 		// the only non-nil error will be a context cancellation.
 		return err
@@ -149,6 +152,7 @@ func (d *depthFirst) handleContentsWithStat(ctx context.Context, parent string, 
 			numEntries: numEntries,
 		}
 		if d.expr.Eval(ws) {
+			d.stats.UpdateFile(d.fs.Join(parent, info.Name()), info.Size())
 			d.visit(parent, c.Name(), contents[i], &info, nil)
 		}
 		if c.IsDir() {

@@ -10,15 +10,13 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+	"time"
 
-	"cloudeng.io/aws/awsconfig"
-	"cloudeng.io/aws/s3fs"
+	"cloudeng.io/cmd/ufind/internal/dynamic"
 	"cloudeng.io/cmdutil/flags"
 	"cloudeng.io/file"
 	"cloudeng.io/file/filewalk"
 	"cloudeng.io/file/filewalk/asyncstat"
-	"cloudeng.io/file/localfs"
-	"cloudeng.io/path/cloudpath"
 	"cloudeng.io/text/linewrap"
 	"golang.org/x/term"
 )
@@ -26,14 +24,16 @@ import (
 type locateCmd struct{}
 
 type WalkerFlags struct {
-	ConcurrentScans          int `subcmd:"concurrent-dir-scans,1000,number of concurrent directory scans"`
-	ScanSize                 int `subcmd:"dir-scan-size,100,size of directory scans"`
-	ConcurrentStats          int `subcmd:"async-stats-total,1000,max number of concurrent lstat system calls"`
-	ConcurrentStatsThreshold int `subcmd:"async-stats-threshold,10,threshold at which to start issuing concurrent lstat system calls"`
+	ConcurrentScans           int           `subcmd:"concurrent-dir-scans,1000,number of concurrent directory scans"`
+	ScanSize                  int           `subcmd:"dir-scan-size,100,size of directory scans"`
+	ConcurrentStats           int           `subcmd:"async-stats-total,1000,max number of concurrent lstat system calls"`
+	ConcurrentStatsThreshold  int           `subcmd:"async-stats-threshold,10,threshold at which to start issuing concurrent lstat system calls"`
+	DirectoryOpenWaitDuration time.Duration `subcmd:"directory-open-wait-duration,0s,'the time to wait for a directory open to complete, disabled by default; set to a non-zero if some directories appear to be slow to open or to be hanging.'"`
 }
 
 type locateFlags struct {
 	WalkerFlags
+	StatsFlags
 	Exclusions      flags.Repeating `subcmd:"exclude,,exclude directories matching the specified regexp patterns"`
 	SameDevice      bool            `subcmd:"same-device,true,only search directories on the same device as the starting directory"`
 	FollowSoftLinks bool            `subcmd:"follow-softlinks,false,follow softlinks"`
@@ -155,32 +155,29 @@ func (v visit) visit(parent, name string, entry filewalk.Entry, fi *file.Info, e
 }
 
 func (lc locateCmd) locate(ctx context.Context, values interface{}, args []string) error {
-	loc := args[0]
-	match := cloudpath.DefaultMatchers.Match(loc)
-	if len(match.Matched) == 0 {
-		return fmt.Errorf("unsupported path: %v", loc)
-	}
-	var wkfs filewalk.FS
-	switch match.Scheme {
-	case "s3":
-		cfg, err := awsconfig.Load(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to load AWS config: %v", err)
-		}
-		wkfs = s3fs.New(cfg)
-	case "unix":
-		wkfs = localfs.New()
-	default:
-		return fmt.Errorf("unsupported file system scheme: %v", match.Scheme)
-	}
 	lf := values.(*locateFlags)
+	loc := args[0]
+	metaFS.Register("file", dynamic.NewLocalFS(lf.DirectoryOpenWaitDuration))
+	metaFS.Register("unix", dynamic.NewLocalFS(lf.DirectoryOpenWaitDuration))
+	wkfs, err := metaFS.For(ctx, loc)
+	if err != nil {
+		return err
+	}
+	stats := NewStats(&lf.StatsFlags)
 	visit := visit{fs: wkfs, ctx: ctx, lf: lf}
-	return lc.locateFS(ctx, wkfs, lf, visit.visit, args)
+	if err := lc.locateFS(ctx, wkfs, lf, stats, visit.visit, args); err != nil {
+		return err
+	}
+	if lf.Stats {
+		stats.Write(os.Stdout)
+	}
+	return nil
 }
 
 func (lc locateCmd) locateFS(ctx context.Context,
 	wkfs filewalk.FS,
 	lf *locateFlags,
+	stats *Stats,
 	visit visitor,
 	args []string) error {
 	wko, aso, wo, err := lf.WalkerFlags.Options(lf)
@@ -194,14 +191,14 @@ func (lc locateCmd) locateFS(ctx context.Context,
 		}
 		wo = append(wo, withSameDevice(sd))
 	}
-	stats := asyncstat.New(wkfs, aso...)
+	statIssuer := asyncstat.New(wkfs, aso...)
 	expr, err := createExpr(args[1:])
 	if err != nil {
 		return err
 	}
-	wo = append(wo, withStats(expr.NeedsStat() || lf.Long))
+	wo = append(wo, withStats(expr.NeedsStat() || lf.Long || lf.Stats))
 	if !lf.Sorted {
-		return newWalker(expr, wkfs, stats, wko, wo, visit).Walk(ctx, args[0])
+		return newWalker(expr, wkfs, statIssuer, stats, wko, wo, visit).Walk(ctx, args[0])
 	}
-	return newDepthFirstWalker(expr, wkfs, stats, wo, visit).start(ctx, args[0])
+	return newDepthFirstWalker(expr, wkfs, statIssuer, stats, wo, visit).start(ctx, args[0])
 }
